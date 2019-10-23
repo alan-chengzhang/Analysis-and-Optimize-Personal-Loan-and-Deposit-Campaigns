@@ -1,0 +1,259 @@
+---
+title: "Final Project"
+output: flexdashboard::flex_dashboard
+runtime: shiny
+---
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(rmarkdown)
+library(knitr)
+library(Hmisc)
+library(DT)
+library(data.table)
+assignInNamespace("cedta.override", c(data.table:::cedta.override,"rmarkdown"), "data.table")
+
+
+opts_chunk$set(echo = FALSE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55), tidy = TRUE)
+
+```
+
+
+```{r read_data, include=FALSE}
+dat <- fread(input = "../Data/cleaned.total.csv", verbose = FALSE)
+dat[, education := as.character(education)][education == "", education := "OTHER"]
+dat[, mortgage := as.character(mortgage)][mortgage == "N", mortgage := "No"]
+dat[, mortgage := as.character(mortgage)][mortgage == "Y", mortgage := "Yes"]
+dat[, response := as.character(response)][response == "0", response := "No"]
+dat[, response := as.character(response)][response == "1", response := "Yes"]
+dat[, contact_ind := as.character(contact_ind)][contact_ind == "N", contact_ind := "No"]
+dat[, contact_ind := as.character(contact_ind)][contact_ind == "Y", contact_ind := "Yes"]
+dat[, ever_loan_user := as.character(ever_loan_user)][ever_loan_user == "0", ever_loan_user := "No"]
+dat[, ever_loan_user := as.character(ever_loan_user)][ever_loan_user == "1", ever_loan_user := "Yes"]
+dat[, other_lending_user := as.character(other_lending_user)][other_lending_user == "N", other_lending_user := "No"]
+dat[, other_lending_user := as.character(other_lending_user)][other_lending_user == "Y", other_lending_user := "Yes"]
+dat[, unauth_over_card_limit := as.character(unauth_over_card_limit)][unauth_over_card_limit == "0", 
+                                                                      unauth_over_card_limit := "No"]
+dat[, unauth_over_card_limit := as.character(unauth_over_card_limit)][unauth_over_card_limit == "1", 
+                                                                      unauth_over_card_limit := "Yes"]
+dat[, hold_insurance_ind := as.character(hold_insurance_ind)][hold_insurance_ind == "0", hold_insurance_ind := "No"]
+dat[, hold_insurance_ind := as.character(hold_insurance_ind)][hold_insurance_ind == "1", hold_insurance_ind := "Yes"]
+```
+
+
+
+```{r constants}
+id.name <- "dummy_cus_key"
+age.name <- "age"
+gender.name <- "gender"
+age.group.name <- "age group"
+job.name <- "job"
+education.name <- "education"
+channel.name <- "channel"
+contact.indicator.name <- "contact_ind"
+response.name <- "response"
+mortgate.name <- "mortgage"
+ever.loan.name <- "ever_loan_user"
+other.lending.name <- "other_lending_user"
+over.card.limit.name <- "unauth_over_card_limit"
+saving.name <- "total_saving_bal"
+saving.group.name <- "saving group"
+insurance.name <- "hold_insurance_ind"
+
+cuts.age <- c(18, 35, 50, 65, 120)
+cuts.balance <- 10000*c(0, 40, 80, 120, 900)
+dat[, eval(age.group.name) := cut2(x = get(age.name), cuts = cuts.age)]
+dat[, eval(saving.group.name) := cut2(x = get(saving.name), cuts = cuts.balance)]
+unique.age.groups <- dat[, unique(get(age.group.name))]
+unique.saving.groups <- dat[, unique(get(saving.group.name))]
+unique.genders <- dat[, unique(get(gender.name))]
+unique.responses <- dat[, unique(get(response.name))]
+unique.channels <- dat[, unique(get(channel.name))]
+unique.indicators <- dat[, unique(get(contact.indicator.name))]
+financial.variables <- c(mortgate.name, ever.loan.name, other.lending.name, over.card.limit.name, saving.group.name, 
+                         insurance.name)
+respondent.variables <- c(age.group.name, gender.name, job.name, education.name)
+```
+
+
+
+```{r functions}
+percentage.table <- function(x, digits = 1){
+  tab <- table(x)
+  percentage.tab <- 100*tab/(sum(tab))
+  rounded.tab <- round(x = percentage.tab, digits = digits)
+  return(rounded.tab)
+}
+
+round.numerics <- function(x, digits){
+  if(is.numeric(x)){
+    x <- round(x = x, digits = digits)
+  }
+  return(x)
+}
+
+colApply <- function(dat, cols = colnames(dat), func = as.factor){
+  dat[cols] <- lapply(dat[cols], func)
+  return(dat)
+} 
+
+
+```
+
+
+Introduction
+=====================================  
+
+Personal Loan is a product that allows customer lending money from the bank without any collateral. In the marketing campaigns, the bank will send loan information to selected customers, aiming at attract more customers apply loan product and increase the revenue.
+
+We are analyzing data from the Marketing Department in order to review and improve the campaign effectiveness. 
+
+Click on the tabs to see different reports.
+
+
+Demographics
+===================================
+
+
+Row {data-height=500}
+-------------------------------------
+
+```{r respondents}
+inputPanel(
+   selectInput(inputId="respondent_variable", label = "Select Variable:", choices = 
+                 respondent.variables, selected = respondent.variables[1]), 
+   checkboxInput(inputId = "respondent_show_percentages", label = "Show Percentages", value = TRUE)
+)
+
+
+
+renderPlot({
+  subdata0 <- percentage.table(x = dat[, get(input$respondent_variable)])
+  barplot(height = subdata0, space=0.01, las = 1, main = input$respondent_variable, 
+          ylab = "Percentage",
+          ylim = c(0, 100), col =  "slategray1")
+  if(input$respondent_show_percentages == TRUE){
+    space_val = 0
+    text(x = -0.4 + 1:length(subdata0) * (1+space_val), y = subdata0, 
+         labels = sprintf("%.1f%%", subdata0), pos = 3)
+  }
+})
+```
+
+Financial Background
+===================================
+
+
+Row {data-height=500}
+-------------------------------------
+
+```{r financial background}
+inputPanel(
+   selectInput(inputId="financial_variable", label = "Select Variable:", choices = 
+                 financial.variables, selected = financial.variables[1]), 
+   checkboxInput(inputId = "fb_show_percentages", label = "Show Percentages", value = TRUE)
+)
+
+
+
+renderPlot({
+  subdata1 <- percentage.table(x = dat[, get(input$financial_variable)])
+  barplot(height = subdata1, space=0.01, las = 1, main = input$financial_variable, 
+          ylab = "Percentage",
+          ylim = c(0, 100), col =  "slategray1")
+  if(input$fb_show_percentages == TRUE){
+    space_val = 0
+    text(x = -0.4 + 1:length(subdata1) * (1+space_val), y = subdata1, 
+         labels = sprintf("%.1f%%", subdata1), pos = 3)
+  }
+})
+```
+
+Primary Response Rate
+===================================
+
+
+Row {data-height=500}
+-------------------------------------
+```{r response}
+inputPanel(
+  selectInput(inputId="channel", label = "Select Contact Method:", choices = unique.channels, selected = unique.channels[1]),
+  selectInput(inputId="subgroup", label = "Select Subgroup:", choices = c("All", respondent.variables), selected = "All"),
+  selectInput(inputId="responses", label = "Respond or not:", choices = unique.indicators, 
+              selected = unique.indicators[1]),
+  checkboxInput(inputId = "r_show_percentages", label = "Show Percentages", value = TRUE)
+)
+
+renderPlot({
+  if(input$subgroup == "All"){
+    tab <- dat[get(channel.name) == input$channel, .(Mean = 100*mean(get(contact.indicator.name) == input$responses))]
+    tab[, All := "All respondents"]
+  }
+  else{
+    tab <- dat[get(channel.name) == input$channel, .(Mean = 100*mean(get(contact.indicator.name) == input$responses)), 
+               keyby = eval(input$subgroup)]
+  }
+  if(input$responses == "Yes"){
+    temp <- "respond"
+  }
+  else{
+    temp <- "not respond"
+  }
+  
+  barplot(height = tab[, Mean], names.arg = tab[, get(input$subgroup)], space=0.01, las = 1, 
+          main = sprintf("%s to %s %s", input$channel, input$subgroup, temp), 
+          ylab = "Percentage", xlab = input$subgroup, ylim = c(0, 1.2 * max(tab[, Mean], na.rm = TRUE)), col = "slategray1")
+  
+  if(input$r_show_percentages == TRUE){
+    space_val = 0
+    text(x = -0.4 + 1:tab[, .N] * (1+space_val), y = tab[, Mean], labels = sprintf("%.1f%%", tab[, Mean]), pos = 3)
+  }
+})
+
+```
+
+
+Secondary Response Rate
+===================================
+
+
+Row {data-height=500}
+-------------------------------------
+```{r response2}
+inputPanel(
+  selectInput(inputId="channel2", label = "Select Contact Method:", choices = unique.channels, selected = unique.channels[1]),
+  selectInput(inputId="subgroup2", label = "Select Subgroup:", choices = c("All", respondent.variables), selected = "All"),
+  selectInput(inputId="responses2", label = "Open account or not:", choices = unique.responses, 
+              selected = unique.responses[1]),
+  checkboxInput(inputId = "r2_show_percentages", label = "Show Percentages", value = TRUE)
+)
+
+renderPlot({
+  if(input$subgroup2 == "All"){
+    tab <- dat[get(channel.name) == input$channel2, .(Mean = 100*mean(get(response.name) == input$responses2))]
+    tab[, All := "All respondents"]
+  }
+  else{
+    tab <- dat[get(channel.name) == input$channel2, .(Mean = 100*mean(get(response.name) == input$responses2)), 
+               keyby = eval(input$subgroup2)]
+  }
+  if(input$responses2 == "Yes"){
+    temp <- "open an account"
+  }
+  else{
+    temp <- "not open an account"
+  }
+  barplot(height = tab[, Mean], names.arg = tab[, get(input$subgroup2)], space=0.01, las = 1, 
+          main = sprintf("%s to %s %s", input$channel2, input$subgroup2, temp), 
+          ylab = "Percentage", xlab = input$subgroup2, ylim = c(0, 1.2 * max(tab[, Mean], na.rm = TRUE)), col = "slategray1")
+  
+  if(input$r2_show_percentages == TRUE){
+    space_val = 0
+    text(x = -0.4 + 1:tab[, .N] * (1+space_val), y = tab[, Mean], labels = sprintf("%.1f%%", tab[, Mean]), pos = 3)
+  }
+})
+
+```
+
